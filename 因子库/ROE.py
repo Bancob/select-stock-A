@@ -1,0 +1,69 @@
+"""
+未经授权，不得复制、修改、或使用本代码的全部或部分内容。仅限个人学习用途，禁止商业用途。
+"""
+import pandas as pd
+
+# 财务因子列：此列表用于存储财务因子相关的列名称
+fin_cols = ['R_np_atoopc@xbx_单季', 'B_total_equity_atoopc@xbx', 'R_np_atoopc@xbx_ttm']  # 财务因子列，配置后系统会自动加载对应的财务数据
+
+
+def add_factor(df: pd.DataFrame, param=None, **kwargs) -> (pd.DataFrame, dict):
+    """
+    计算并将新的因子列添加到股票行情数据中，并返回包含计算因子的DataFrame及其聚合方式。
+
+    工作流程：
+    1. 根据提供的参数计算股票的因子值。
+    2. 将因子值添加到原始行情数据DataFrame中。
+    3. 定义因子的聚合方式，用于周期转换时的数据聚合。
+
+    :param df: pd.DataFrame，包含单只股票的K线数据，必须包括市场数据（如收盘价等）。
+    :param param: 因子计算所需的参数，格式和含义根据因子类型的不同而有所不同。
+    :param kwargs: 其他关键字参数，包括：
+        - col_name: 新计算的因子列名。
+        - fin_data: 财务数据字典，格式为 {'财务数据': fin_df, '原始财务数据': raw_fin_df}，其中fin_df为处理后的财务数据，raw_fin_df为原始数据，后者可用于某些因子的自定义计算。
+        - 其他参数：根据具体需求传入的其他因子参数。
+    :return: tuple
+        - pd.DataFrame: 包含新计算的因子列，与输入的df具有相同的索引。
+        - dict: 聚合方式字典，定义因子在周期转换时如何聚合（例如保留最新值、计算均值等）。
+
+    注意事项：
+    - 如果因子的计算涉及财务数据，可以通过`fin_data`参数提供相关数据。
+    - 聚合方式可以根据实际需求进行调整，例如使用'last'保留最新值，或使用'mean'、'max'、'sum'等方法。
+    """
+
+    # ======================== 参数处理 ===========================
+    # 从kwargs中提取因子列的名称，这里使用'col_name'来标识因子列名称
+    col_name = kwargs['col_name']
+
+    # 净利润相关字段说明
+    # - R_np_atoopc@xbx_ttm:利润表的归属于母公司所有者的净利润ttm
+    # - R_np_atoopc@xbx_单季:利润表的归属于母公司所有者的净利润单季度
+    profit_cols = {
+        '全年': 'R_np_atoopc@xbx_ttm',
+        '单季': 'R_np_atoopc@xbx_单季'
+    }
+
+    # 根据param选择相应的净利润字段
+    if param not in profit_cols:
+        raise ValueError(f"ROE因子不支持的参数值：{param}")
+    else:
+        profit_col = profit_cols[param]
+
+    # ======================== 计算因子 ===========================
+    # ROE：净资产收益率 = 净利润 / 净资产
+    # - B_total_equity_atoopc@xbx:资产负债表_所有者权益的归属于母公司所有者权益合计
+    df[col_name] = df[profit_col] / df['B_total_equity_atoopc@xbx']
+
+    # ======================== 聚合方式 ===========================
+    # 定义因子聚合方式，这里使用'last'表示在周期转换时保留该因子的最新值
+    agg_rules = {
+        col_name: 'last'  # 'last'表示在周期转换时，保留该因子列中的最新值
+        # 如果需要其他聚合方式，可以选择以下函数：
+        # - 'mean'：计算均值，例如用于市值的平均值。
+        # - 'max'：计算最大值，例如用于最大涨幅。
+        # - 'min'：计算最小值，例如用于最大跌幅。
+        # - 'sum'：计算总和，例如用于成交量。
+    }
+
+    # 返回新计算的因子列以及因子聚合方式
+    return df[[col_name]], agg_rules
